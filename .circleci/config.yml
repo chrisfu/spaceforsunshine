@@ -1,0 +1,76 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: docker:18.03.1-ce
+    working_directory: /build
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: false
+      - run:
+          name: Build Docker image
+          command: |
+            if [ -z "$CIRCLE_TAG" ]; then export TAG=$CIRCLE_BRANCH; else export TAG=$CIRCLE_TAG; fi
+            docker build -t chrisfu/spaceforsunshine:latest -t chrisfu/spaceforsunshine:$TAG .
+      - run:
+          name: Push Docker image to Docker Hub
+          command: |
+            docker login -u $DOCKER_USER -p $DOCKER_PASS
+            if [ $CIRCLE_BRANCH = "develop" ]; then docker push chrisfu/spaceforsunshine:develop; fi
+            if [ $CIRCLE_BRANCH != "develop" ]; then docker push chrisfu/spaceforsunshine:$TAG && docker push chrisfu/spaceforsunshine:latest; fi
+  deploy-staging-server:
+    docker:
+      - image: docker:18.03.1-ce
+    working_directory: /build
+    steps:
+      - run:
+          name: Deploy to Kubernetes staging
+          command: |
+            echo "This would deploy staging."
+  deploy-prod-server:
+    docker:
+      - image: docker:18.03.1-ce
+    working_directory: /build
+    steps:
+      - run:
+          name: Deploy to Kubernetes prod
+          command: |
+            echo "This would deploy prod."
+
+workflows:
+  version: 2
+  staging_deploy:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only: develop
+              ignore: /.*/
+            tags:
+              ignore: /.*/
+      - deploy-staging-server:
+          requires:
+            - build
+          filters:
+            branches:
+              only: develop
+              ignore: /.*/
+            tags:
+              ignore: /.*/
+  prod_deploy:
+    jobs:
+      - build:
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v.*/
+      - deploy-prod-server:
+          requires:
+            - build
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v.*/
